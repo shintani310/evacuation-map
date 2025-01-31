@@ -6,97 +6,59 @@
     <title>避難所マップ</title>
 </head>
 <body>
-    <h1>避難所マップ</h1>
-    <p>最寄りの避難所へのルートをGoogleマップアプリで開きます。</p>
-    
-    <button onclick="openGoogleMaps()">Googleマップアプリで開く</button>
+    <div id="map"></div>
+    <button id="navigate-button" style="margin: 10px; padding: 10px;">Googleマップでナビを開始</button>
 
-    <script>
-        function openGoogleMaps() {
-            console.log("JSON データを読み込みます...");
-
-            fetch('/evacuation-map/shelters.json')
-                .then(response => response.json())
-                .then(shelters => {
-                    console.log("避難所データ:", shelters);
-
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition((position) => {
-                            const userLocation = `${position.coords.latitude},${position.coords.longitude}`;
-                            console.log("現在地:", userLocation);
-
-                            findNearestShelter(userLocation, shelters)
-                                .then(nearestShelter => {
-                                    if (!nearestShelter) {
-                                        alert("最寄りの避難所が見つかりませんでした。");
-                                        return;
-                                    }
-                                    const googleMapsURL = generateGoogleMapsURL(userLocation, nearestShelter, shelters);
-                                    console.log("Google マップの URL:", googleMapsURL);
-                                    window.location.href = googleMapsURL;
-                                });
-                        });
-                    } else {
-                        alert("位置情報が利用できません。");
-                    }
-                })
-                .catch(error => {
-                    console.error("JSON の読み込みに失敗:", error);
-                });
-        }
-
-        function findNearestShelter(userLocation, shelters) {
-            return new Promise((resolve) => {
-                let nearestShelter = null;
-                let shortestRouteDistance = Infinity;
-
-                const directionsService = new google.maps.DirectionsService();
-                let pendingRequests = shelters.length;
-
-                shelters.forEach(shelter => {
-                    const request = {
-                        origin: userLocation,
-                        destination: `${shelter.lat},${shelter.lng}`,
-                        travelMode: google.maps.TravelMode.DRIVING,
-                    };
-
-                    directionsService.route(request, (result, status) => {
-                        if (status === google.maps.DirectionsStatus.OK) {
-                            const routeDistance = result.routes[0].legs[0].distance.value;
-                            if (routeDistance < shortestRouteDistance) {
-                                shortestRouteDistance = routeDistance;
-                                nearestShelter = shelter;
-                            }
-                        }
-                        pendingRequests--;
-
-                        if (pendingRequests === 0) {
-                            resolve(nearestShelter);
-                        }
-                    });
-                });
-            });
-        }
-
-        function generateGoogleMapsURL(userLocation, nearestShelter, shelters) {
-            const destination = `${nearestShelter.lat},${nearestShelter.lng}`;
-
-            // **避難所データが有効なら Google マップに渡す**
-            if (!shelters || shelters.length === 0) {
-                console.error("避難所データが空です！");
-                return `comgooglemaps://?api=1&origin=${userLocation}&destination=${destination}&travelmode=driving`;
-            }
-
-            // **全避難所をピンとして表示するための `waypoints` を追加**
-            const waypoints = shelters
-                .map(shelter => `${shelter.lat},${shelter.lng}`)
-                .join("|");
-
-            return `comgooglemaps://?api=1&origin=${userLocation}&destination=${destination}&waypoints=${waypoints}&travelmode=driving`;
-        }
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&libraries=geometry">
     </script>
 
-    <!-- Google Maps API 読み込み -->
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&libraries=geometry"></script>
+    <script>
+        function initMap() {
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 12,
+                center: { lat: 33.6, lng: 134.3 }, // 地図の初期中心位置
+            });
+
+            const shelters = [
+                { name: "避難所1", lat: 33.6468721, lng: 134.2971167 },
+                // 他の避難所データ
+            ];
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                        };
+
+                        // 現在地を地図に表示
+                        new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            title: "現在地",
+                            icon: {
+                                url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                            },
+                        });
+
+                        // 最寄り避難所を計算
+                        const nearestShelter = shelters[0]; // 簡易例として1つ目を仮定
+                        const navigateButton = document.getElementById("navigate-button");
+
+                        // ボタンにGoogleマップのナビリンクを設定
+                        navigateButton.onclick = function () {
+                            const mapURL = `comgooglemaps://?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${nearestShelter.lat},${nearestShelter.lng}&travelmode=driving`;
+                            window.location.href = mapURL;
+                        };
+                    },
+                    () => {
+                        alert("位置情報が取得できませんでした");
+                    }
+                );
+            }
+        }
+    </script>
 </body>
 </html>
