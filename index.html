@@ -4,16 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>避難所マップ</title>
-    <script>
-        const API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; // 🔹 AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk
-        function loadGoogleMaps() {
-            const script = document.createElement("script");
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}`;
-            script.async = true;
-            document.head.appendChild(script);
-        }
-        loadGoogleMaps();
-    </script>
     <style>
         #map {
             height: 100vh;
@@ -23,50 +13,52 @@
 </head>
 <body>
     <div id="map"></div>
+
+    <!-- Google Maps API スクリプトを読み込む -->
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&callback=initMap">
+    </script>
+
     <script>
-        console.log("JSONファイルをリクエストします");
-
-        // shelters.json をGitHub Pagesの適切なパスで読み込む
-        fetch('/evacuation-map/shelters.json')
-            .then(response => {
-                console.log("レスポンスを受信しました", response);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log("JSONデータ:", data);
-                initMap(data);
-            })
-            .catch(error => {
-                console.error("JSONの読み込みに失敗:", error);
-            });
-
-        function initMap(shelters) {
+        function initMap() {
+            console.log("Google Maps APIが読み込まれました");
             const center = { lat: 33.6, lng: 134.3 }; // 地図の初期中心位置
             const map = new google.maps.Map(document.getElementById("map"), {
                 zoom: 12,
                 center: center,
             });
 
-            shelters.forEach(shelter => {
-                const marker = new google.maps.Marker({
-                    position: { lat: shelter.lat, lng: shelter.lng },
-                    map: map,
-                    title: shelter.name,
-                });
+            fetch('/evacuation-map/shelters.json')
+                .then(response => {
+                    console.log("レスポンスを受信しました", response);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("JSONデータ:", data);
 
-                const infoWindow = new google.maps.InfoWindow({
-                    content: `<h3>${shelter.name}</h3><p>${shelter.address}</p>`,
-                });
+                    data.forEach(shelter => {
+                        const marker = new google.maps.Marker({
+                            position: { lat: shelter.lat, lng: shelter.lng },
+                            map: map,
+                            title: shelter.name,
+                        });
 
-                marker.addListener("click", () => {
-                    infoWindow.open(map, marker);
+                        const infoWindow = new google.maps.InfoWindow({
+                            content: `<h3>${shelter.name}</h3><p>${shelter.address}</p>`,
+                        });
+
+                        marker.addListener("click", () => {
+                            infoWindow.open(map, marker);
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error("JSONの読み込みに失敗:", error);
                 });
-            });
         }
     </script>
 </body>
 </html>
-
