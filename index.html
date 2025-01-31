@@ -20,8 +20,8 @@
     </script>
 
     <script>
-        let map; // 地図オブジェクト
-        let shelters = []; // 避難所データ
+        let map;
+        let shelters = [];
         let directionsService;
         let directionsRenderer;
 
@@ -110,7 +110,7 @@
             }
         }
 
-        // 🔹 最速で到達できる避難所を探す
+        // 🔹 ルート距離が最短の避難所を探す（車移動）
         function findFastestShelter(userLocation) {
             let shortestTime = Infinity;
             let bestShelter = null;
@@ -120,7 +120,7 @@
                 const request = {
                     origin: userLocation,
                     destination: { lat: shelter.lat, lng: shelter.lng },
-                    travelMode: google.maps.TravelMode.WALKING, // 徒歩ルート
+                    travelMode: google.maps.TravelMode.DRIVING, // 🚗 車移動に変更
                 };
 
                 directionsService.route(request, (result, status) => {
@@ -141,6 +141,7 @@
                         if (bestShelter) {
                             console.log("最短ルートの避難所:", bestShelter);
                             showRoute(userLocation, bestShelter);
+                            openGoogleMapsNavigation(userLocation, bestShelter);
                         } else {
                             console.error("最適な避難所が見つかりませんでした");
                         }
@@ -154,7 +155,7 @@
             const request = {
                 origin: userLocation,
                 destination: { lat: bestShelter.lat, lng: bestShelter.lng },
-                travelMode: google.maps.TravelMode.WALKING, // 徒歩ルート
+                travelMode: google.maps.TravelMode.DRIVING, // 🚗 車移動
             };
 
             directionsService.route(request, (result, status) => {
@@ -164,6 +165,13 @@
                     console.error("ルートの取得に失敗しました", status);
                 }
             });
+        }
+
+        // 🔹 Googleマップアプリを開いてナビを開始
+        function openGoogleMapsNavigation(userLocation, bestShelter) {
+            const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${bestShelter.lat},${bestShelter.lng}&travelmode=driving`;
+            console.log("Googleマップのナビを開始:", googleMapsUrl);
+            window.location.href = googleMapsUrl; // 🔹 自動でナビ画面へ遷移
         }
     </script>
 </body>
