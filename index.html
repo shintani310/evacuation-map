@@ -16,12 +16,14 @@
 
     <!-- Google Maps API のスクリプトを正しく読み込む -->
     <script async defer
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&libraries=geometry&callback=initMap">
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&libraries=geometry,places&callback=initMap">
     </script>
 
     <script>
         let map; // 地図オブジェクト
         let shelters = []; // 避難所データ
+        let directionsService;
+        let directionsRenderer;
 
         function initMap() {
             console.log("Google Maps APIが読み込まれました");
@@ -30,6 +32,10 @@
                 zoom: 12,
                 center: { lat: 33.6, lng: 134.3 }, // 初期中心位置
             });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
 
             // 🔹 避難所データを読み込む
             fetch('/evacuation-map/shelters.json')
@@ -92,11 +98,8 @@
 
                         map.setCenter(userLocation);
 
-                        // 最寄りの避難所を探してルート表示
-                        const nearestShelter = findNearestShelter(userLocation);
-                        if (nearestShelter) {
-                            showRoute(userLocation, nearestShelter);
-                        }
+                        // 最短ルートの避難所を探す
+                        findFastestShelter(userLocation);
                     },
                     () => {
                         console.error("位置情報の取得に失敗しました");
@@ -107,36 +110,50 @@
             }
         }
 
-        // 🔹 最寄りの避難所を探す関数
-        function findNearestShelter(userLocation) {
-            let nearestShelter = null;
-            let shortestDistance = Infinity;
+        // 🔹 最速で到達できる避難所を探す
+        function findFastestShelter(userLocation) {
+            let shortestTime = Infinity;
+            let bestShelter = null;
+            let completedRequests = 0;
 
             shelters.forEach(shelter => {
-                const distance = google.maps.geometry.spherical.computeDistanceBetween(
-                    new google.maps.LatLng(userLocation.lat, userLocation.lng),
-                    new google.maps.LatLng(shelter.lat, shelter.lng)
-                );
+                const request = {
+                    origin: userLocation,
+                    destination: { lat: shelter.lat, lng: shelter.lng },
+                    travelMode: google.maps.TravelMode.WALKING, // 徒歩ルート
+                };
 
-                if (distance < shortestDistance) {
-                    shortestDistance = distance;
-                    nearestShelter = shelter;
-                }
+                directionsService.route(request, (result, status) => {
+                    if (status === google.maps.DirectionsStatus.OK) {
+                        const duration = result.routes[0].legs[0].duration.value; // 秒単位の所要時間
+                        console.log(`避難所: ${shelter.name}, 所要時間: ${duration}秒`);
+
+                        if (duration < shortestTime) {
+                            shortestTime = duration;
+                            bestShelter = shelter;
+                        }
+                    } else {
+                        console.error("ルート取得失敗", status);
+                    }
+
+                    completedRequests++;
+                    if (completedRequests === shelters.length) {
+                        if (bestShelter) {
+                            console.log("最短ルートの避難所:", bestShelter);
+                            showRoute(userLocation, bestShelter);
+                        } else {
+                            console.error("最適な避難所が見つかりませんでした");
+                        }
+                    }
+                });
             });
-
-            console.log("最寄りの避難所:", nearestShelter);
-            return nearestShelter;
         }
 
         // 🔹 ルートを表示する関数
-        function showRoute(userLocation, nearestShelter) {
-            const directionsService = new google.maps.DirectionsService();
-            const directionsRenderer = new google.maps.DirectionsRenderer();
-            directionsRenderer.setMap(map);
-
+        function showRoute(userLocation, bestShelter) {
             const request = {
                 origin: userLocation,
-                destination: { lat: nearestShelter.lat, lng: nearestShelter.lng },
+                destination: { lat: bestShelter.lat, lng: bestShelter.lng },
                 travelMode: google.maps.TravelMode.WALKING, // 徒歩ルート
             };
 
