@@ -13,12 +13,17 @@
 
     <script>
         function openGoogleMaps() {
+            console.log("JSON データを読み込みます...");
+
             fetch('/evacuation-map/shelters.json')
                 .then(response => response.json())
                 .then(shelters => {
+                    console.log("避難所データ:", shelters);
+
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition((position) => {
                             const userLocation = `${position.coords.latitude},${position.coords.longitude}`;
+                            console.log("現在地:", userLocation);
 
                             findNearestShelter(userLocation, shelters)
                                 .then(nearestShelter => {
@@ -27,12 +32,16 @@
                                         return;
                                     }
                                     const googleMapsURL = generateGoogleMapsURL(userLocation, nearestShelter, shelters);
+                                    console.log("Google マップの URL:", googleMapsURL);
                                     window.location.href = googleMapsURL;
                                 });
                         });
                     } else {
                         alert("位置情報が利用できません。");
                     }
+                })
+                .catch(error => {
+                    console.error("JSON の読み込みに失敗:", error);
                 });
         }
 
@@ -71,13 +80,23 @@
 
         function generateGoogleMapsURL(userLocation, nearestShelter, shelters) {
             const destination = `${nearestShelter.lat},${nearestShelter.lng}`;
-            const waypoints = shelters.map(shelter => `${shelter.lat},${shelter.lng}`).join("|");
+
+            // **避難所データが有効なら Google マップに渡す**
+            if (!shelters || shelters.length === 0) {
+                console.error("避難所データが空です！");
+                return `comgooglemaps://?api=1&origin=${userLocation}&destination=${destination}&travelmode=driving`;
+            }
+
+            // **全避難所をピンとして表示するための `waypoints` を追加**
+            const waypoints = shelters
+                .map(shelter => `${shelter.lat},${shelter.lng}`)
+                .join("|");
 
             return `comgooglemaps://?api=1&origin=${userLocation}&destination=${destination}&waypoints=${waypoints}&travelmode=driving`;
         }
     </script>
 
-    <!-- 🔹 APIキーを含む Google Maps API のスクリプト -->
+    <!-- Google Maps API 読み込み -->
     <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk&libraries=geometry"></script>
 </body>
 </html>
