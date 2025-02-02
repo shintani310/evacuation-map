@@ -10,7 +10,7 @@
       height: 100vh;
       width: 100%;
     }
-    /* 情報ウィンドウ内のボタンサイズ調整（任意） */
+    /* 情報ウィンドウ内のボタン（ナビ開始）のスタイル */
     .info-window button {
       margin-top: 8px;
       padding: 6px 10px;
@@ -19,43 +19,46 @@
   </style>
 </head>
 <body>
-  <!-- Google マップを表示する領域 -->
+  <!-- このページは https://shintani310.github.io/evacuation-map/ 上で公開します -->
   <div id="map"></div>
 
   <script>
-    // グローバル変数
     let map;
-    let userLocation;     // { lat: 数値, lng: 数値 }
-    let shelters = [];    // JSONから読み込んだ避難所データ
-    let markers = [];     // 各避難所のマーカー
+    let userLocation;
+    let shelters = [];    // shelters.json から取得した避難所データ
+    let markers = [];     // 避難所マーカー一覧
     let infoWindow;       // 現在開いている情報ウィンドウ
-    let nearestShelter;   // 最短到着の避難所データ
-    let nearestMarker;    // 対応するマーカー
+    let nearestShelter;   // 最短（到着時間最小）の避難所データ
+    let nearestMarker;    // そのマーカー
+    let directionsRenderer; // ルート描画用
 
     // ページ読み込み時に自動実行
     window.addEventListener('load', initMap);
 
-    // マップ初期化と処理開始
     function initMap() {
-      // 初期表示用に適当な中心点を設定
+      // 初期表示用のマップ（後でユーザー位置に合わせて再設定）
       map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 35, lng: 139 },
         zoom: 12
       });
-      
-      // JSON から避難所データを取得
+
+      // ルート描画用のインスタンスを生成
+      directionsRenderer = new google.maps.DirectionsRenderer();
+      directionsRenderer.setMap(map);
+
+      // shelters.json から避難所データを取得（HTMLと同一ディレクトリに配置）
       fetch('shelters.json')
         .then(response => response.json())
         .then(data => {
           shelters = data;
-          // ユーザーの現在地取得
+          // ユーザーの現在地を取得
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition((position) => {
               userLocation = {
                 lat: position.coords.latitude,
                 lng: position.coords.longitude
               };
-              // ユーザー位置を中心にマップ再設定
+              // ユーザー位置を中心にマップを再設定
               map.setCenter(userLocation);
               // ユーザーの現在地マーカー（青い円）
               new google.maps.Marker({
@@ -71,7 +74,8 @@
                 },
                 title: "現在地"
               });
-              // 避難所の各位置にマーカー配置
+
+              // 各避難所の位置にマーカーを配置
               shelters.forEach(shelter => {
                 const pos = { lat: shelter.lat, lng: shelter.lng };
                 const marker = new google.maps.Marker({
@@ -79,15 +83,16 @@
                   map: map,
                   title: shelter.name
                 });
-                // マーカーに避難所データを関連付ける
+                // マーカーに避難所情報を紐付け
                 marker.shelterData = shelter;
                 markers.push(marker);
-                // マーカーをタップしたときは、その情報ウィンドウを開く
+                // マーカーをクリックした場合、情報ウィンドウを表示
                 marker.addListener('click', () => {
                   openInfoWindow(marker);
                 });
               });
-              // すべてのマーカー配置完了後、最短（到着時間最小）の避難所を決定
+
+              // 全避難所について、運転時の所要時間を計算して最短の避難所を決定
               determineNearestShelter();
             }, () => {
               alert("位置情報が取得できませんでした。");
@@ -96,16 +101,13 @@
             alert("このブラウザは位置情報に対応していません。");
           }
         })
-        .catch(error => {
-          console.error("避難所データの取得エラー:", error);
-        });
+        .catch(error => console.error("避難所データ取得エラー:", error));
     }
 
     // 指定したマーカーの情報ウィンドウを開く
     function openInfoWindow(marker) {
       if (infoWindow) { infoWindow.close(); }
       const shelter = marker.shelterData;
-      // 情報ウィンドウ内にナビ開始ボタンを設置
       const content = `
         <div class="info-window">
           <strong>${shelter.name}</strong><br>
@@ -117,24 +119,32 @@
         content: content
       });
       infoWindow.open(map, marker);
-      // DOM生成後にボタンのクリックイベントを設定
+      // 情報ウィンドウ内の「ナビ開始」ボタンのイベント設定
       google.maps.event.addListenerOnce(infoWindow, 'domready', () => {
         document.getElementById('navButton').addEventListener('click', () => {
-          launchNavigation(marker.position);
+          displayRoute(marker.position);
         });
       });
     }
 
-    // ネイティブの Google Maps アプリを起動してナビ開始（URLスキーム）
-    function launchNavigation(destination) {
-      const originStr = `${userLocation.lat},${userLocation.lng}`;
-      const destStr = `${destination.lat()},${destination.lng()}`;
-      const url = `comgooglemaps://?saddr=${originStr}&daddr=${destStr}&directionsmode=driving`;
-      window.location.href = url;
+    // ユーザーの現在地から指定先（destination）までのルートを計算し、マップ上に描画する
+    function displayRoute(destination) {
+      const directionsService = new google.maps.DirectionsService();
+      const request = {
+        origin: userLocation,
+        destination: { lat: destination.lat(), lng: destination.lng() },
+        travelMode: google.maps.TravelMode.DRIVING
+      };
+      directionsService.route(request, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK) {
+          directionsRenderer.setDirections(result);
+        } else {
+          alert("ルート取得に失敗しました: " + status);
+        }
+      });
     }
 
-    // DirectionsService を利用して各避難所への運転時間を計算し、
-    // 最も到着時間が短い避難所を決定、そのマーカーの情報ウィンドウを自動で開く
+    // 各避難所までの運転時所要時間を計算し、最も短い避難所（最短到着）を決定する
     function determineNearestShelter() {
       const directionsService = new google.maps.DirectionsService();
       let processed = 0;
@@ -158,19 +168,15 @@
               );
             }
           }
-          // すべての避難所について評価が完了したら、最短の避難所マーカーの情報ウィンドウを開く
+          // すべての避難所評価完了後、最短のマーカーの情報ウィンドウを自動表示
           if (processed === shelters.length && nearestMarker) {
             openInfoWindow(nearestMarker);
-            // ※自動でナビ開始させたい場合は、下記のコメントを外してください。
-            // setTimeout(() => {
-            //   launchNavigation(nearestMarker.position);
-            // }, 2000);
           }
         });
       });
     }
   </script>
-  <!-- Google Maps API 読み込み（API キーを設定してください） -->
+  <!-- Google Maps API の読み込み（YOUR_GOOGLE_MAPS_API_KEY を自身のキーに置換） -->
   <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk"></script>
 </body>
 </html>
