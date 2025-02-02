@@ -1,183 +1,169 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>避難所マップ</title>
-  <style>
-    /* 画面全体にマップを表示 */
-    #map {
-      height: 100vh;
-      width: 100%;
-    }
-    /* 情報ウィンドウ内のボタン（ナビ開始）のスタイル */
-    .info-window button {
-      margin-top: 8px;
-      padding: 6px 10px;
-      font-size: 14px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>避難所マップ</title>
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-  <!-- このページは https://shintani310.github.io/evacuation-map/ 上で公開します -->
-  <div id="map"></div>
+    <div id="map"></div>
 
-  <script>
-    let map;
-    let userLocation;
-    let shelters = [];    // shelters.json から取得した避難所データ
-    let markers = [];     // 避難所マーカー一覧
-    let infoWindow;       // 現在開いている情報ウィンドウ
-    let nearestShelter;   // 最短（到着時間最小）の避難所データ
-    let nearestMarker;    // そのマーカー
-    let directionsRenderer; // ルート描画用
+    <!-- Google Maps API スクリプト -->
+    <script async src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=geometry&callback=initMap"></script>
 
-    // ページ読み込み時に自動実行
-    window.addEventListener('load', initMap);
+    <script>
+        let map, userLocation;
 
-    function initMap() {
-      // 初期表示用のマップ（後でユーザー位置に合わせて再設定）
-      map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: 35, lng: 139 },
-        zoom: 12
-      });
-
-      // ルート描画用のインスタンスを生成
-      directionsRenderer = new google.maps.DirectionsRenderer();
-      directionsRenderer.setMap(map);
-
-      // shelters.json から避難所データを取得（HTMLと同一ディレクトリに配置）
-      fetch('shelters.json')
-        .then(response => response.json())
-        .then(data => {
-          shelters = data;
-          // ユーザーの現在地を取得
-          if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-              userLocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-              };
-              // ユーザー位置を中心にマップを再設定
-              map.setCenter(userLocation);
-              // ユーザーの現在地マーカー（青い円）
-              new google.maps.Marker({
-                position: userLocation,
-                map: map,
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 8,
-                  fillColor: "#4285F4",
-                  fillOpacity: 1,
-                  strokeWeight: 2,
-                  strokeColor: "#ffffff"
-                },
-                title: "現在地"
-              });
-
-              // 各避難所の位置にマーカーを配置
-              shelters.forEach(shelter => {
-                const pos = { lat: shelter.lat, lng: shelter.lng };
-                const marker = new google.maps.Marker({
-                  position: pos,
-                  map: map,
-                  title: shelter.name
-                });
-                // マーカーに避難所情報を紐付け
-                marker.shelterData = shelter;
-                markers.push(marker);
-                // マーカーをクリックした場合、情報ウィンドウを表示
-                marker.addListener('click', () => {
-                  openInfoWindow(marker);
-                });
-              });
-
-              // 全避難所について、運転時の所要時間を計算して最短の避難所を決定
-              determineNearestShelter();
-            }, () => {
-              alert("位置情報が取得できませんでした。");
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 12,
+                center: { lat: 33.6, lng: 134.3 },
             });
-          } else {
-            alert("このブラウザは位置情報に対応していません。");
-          }
-        })
-        .catch(error => console.error("避難所データ取得エラー:", error));
-    }
 
-    // 指定したマーカーの情報ウィンドウを開く
-    function openInfoWindow(marker) {
-      if (infoWindow) { infoWindow.close(); }
-      const shelter = marker.shelterData;
-      const content = `
-        <div class="info-window">
-          <strong>${shelter.name}</strong><br>
-          ${shelter.address}<br>
-          <button id="navButton">ナビ開始</button>
-        </div>
-      `;
-      infoWindow = new google.maps.InfoWindow({
-        content: content
-      });
-      infoWindow.open(map, marker);
-      // 情報ウィンドウ内の「ナビ開始」ボタンのイベント設定
-      google.maps.event.addListenerOnce(infoWindow, 'domready', () => {
-        document.getElementById('navButton').addEventListener('click', () => {
-          displayRoute(marker.position);
-        });
-      });
-    }
+            // 現在地を取得
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                        };
+                        console.log("現在地:", userLocation);
 
-    // ユーザーの現在地から指定先（destination）までのルートを計算し、マップ上に描画する
-    function displayRoute(destination) {
-      const directionsService = new google.maps.DirectionsService();
-      const request = {
-        origin: userLocation,
-        destination: { lat: destination.lat(), lng: destination.lng() },
-        travelMode: google.maps.TravelMode.DRIVING
-      };
-      directionsService.route(request, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK) {
-          directionsRenderer.setDirections(result);
-        } else {
-          alert("ルート取得に失敗しました: " + status);
-        }
-      });
-    }
+                        // 現在地マーカー
+                        new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            title: "現在地",
+                            icon: {
+                                url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                            },
+                        });
 
-    // 各避難所までの運転時所要時間を計算し、最も短い避難所（最短到着）を決定する
-    function determineNearestShelter() {
-      const directionsService = new google.maps.DirectionsService();
-      let processed = 0;
-      let bestDuration = Infinity;
-      shelters.forEach(shelter => {
-        const request = {
-          origin: new google.maps.LatLng(userLocation.lat, userLocation.lng),
-          destination: new google.maps.LatLng(shelter.lat, shelter.lng),
-          travelMode: google.maps.TravelMode.DRIVING
-        };
-        directionsService.route(request, (result, status) => {
-          processed++;
-          if (status === google.maps.DirectionsStatus.OK) {
-            const duration = result.routes[0].legs[0].duration.value; // 秒単位
-            if (duration < bestDuration) {
-              bestDuration = duration;
-              nearestShelter = shelter;
-              // 対応するマーカーを検索
-              nearestMarker = markers.find(m =>
-                m.shelterData.lat === shelter.lat && m.shelterData.lng === shelter.lng
-              );
+                        map.setCenter(userLocation);
+
+                        // 避難所データを取得
+                        fetch('/evacuation-map/shelters.json')
+                            .then(response => response.json())
+                            .then(shelters => {
+                                console.log("避難所データ:", shelters);
+                                showSheltersAndFindNearest(shelters);
+                            })
+                            .catch(error => {
+                                console.error("避難所データの読み込みに失敗:", error);
+                            });
+                    },
+                    () => {
+                        console.error("位置情報の取得に失敗しました");
+                    }
+                );
+            } else {
+                console.error("このブラウザは位置情報をサポートしていません");
             }
-          }
-          // すべての避難所評価完了後、最短のマーカーの情報ウィンドウを自動表示
-          if (processed === shelters.length && nearestMarker) {
-            openInfoWindow(nearestMarker);
-          }
-        });
-      });
-    }
-  </script>
-  <!-- Google Maps API の読み込み（YOUR_GOOGLE_MAPS_API_KEY を自身のキーに置換） -->
-  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzeYjQKEEkRqOPTmWZmZFT4jIHY1Vpjxk"></script>
+        }
+
+        function showSheltersAndFindNearest(shelters) {
+            let nearestShelter = null;
+            let shortestRouteDistance = Infinity;
+
+            shelters.forEach(shelter => {
+                const marker = new google.maps.Marker({
+                    position: { lat: shelter.lat, lng: shelter.lng },
+                    map: map,
+                    title: shelter.name,
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<h3>${shelter.name}</h3><p>${shelter.address}</p>`,
+                });
+
+                marker.addListener("click", () => {
+                    infoWindow.open(map, marker);
+                });
+
+                // 最短ルートを計算
+                const directionsService = new google.maps.DirectionsService();
+                directionsService.route(
+                    {
+                        origin: userLocation,
+                        destination: { lat: shelter.lat, lng: shelter.lng },
+                        travelMode: google.maps.TravelMode.DRIVING, // 車移動
+                    },
+                    (result, status) => {
+                        if (status === google.maps.DirectionsStatus.OK) {
+                            const routeDistance = result.routes[0].legs[0].distance.value; // メートル単位
+                            console.log(`${shelter.name} までの距離: ${routeDistance}m`);
+
+                            if (routeDistance < shortestRouteDistance) {
+                                shortestRouteDistance = routeDistance;
+                                nearestShelter = shelter;
+                            }
+                        }
+                    }
+                );
+            });
+
+            // 最寄りの避難所のルートを表示
+            setTimeout(() => {
+                if (nearestShelter) {
+                    console.log("最寄りの避難所:", nearestShelter);
+                    showRoute(userLocation, nearestShelter);
+                }
+            }, 2000); // 少し待機してルート情報を取得
+        }
+
+        function showRoute(userLocation, nearestShelter) {
+            const directionsService = new google.maps.DirectionsService();
+            const directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+
+            const request = {
+                origin: userLocation,
+                destination: { lat: nearestShelter.lat, lng: nearestShelter.lng },
+                travelMode: google.maps.TravelMode.DRIVING,
+            };
+
+            directionsService.route(request, (result, status) => {
+                if (status === google.maps.DirectionsStatus.OK) {
+                    directionsRenderer.setDirections(result);
+
+                    // ナビゲーション開始ボタンを表示
+                    const navigationUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${nearestShelter.lat},${nearestShelter.lng}&travelmode=driving`;
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `
+                            <h3>最寄りの避難所: ${nearestShelter.name}</h3>
+                            <p>${nearestShelter.address}</p>
+                            <a href="${navigationUrl}" target="_blank" style="display:block; text-align:center; padding:10px; background:#007BFF; color:white; font-weight:bold; text-decoration:none; border-radius:5px; margin-top:10px;">
+                                ナビ開始
+                            </a>
+                        `,
+                    });
+
+                    const marker = new google.maps.Marker({
+                        position: { lat: nearestShelter.lat, lng: nearestShelter.lng },
+                        map: map,
+                        title: nearestShelter.name,
+                    });
+
+                    marker.addListener("click", () => {
+                        infoWindow.open(map, marker);
+                    });
+
+                    // 自動的にウィンドウを開く
+                    infoWindow.open(map, marker);
+                } else {
+                    console.error("ルートの取得に失敗しました", status);
+                }
+            });
+        }
+    </script>
 </body>
 </html>
+
 
